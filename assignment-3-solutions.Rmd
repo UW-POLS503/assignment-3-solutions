@@ -1,0 +1,128 @@
+---
+title: 'POLS/CS&SS 503: Assignment 3'
+author: Jeffrey Arnold
+date: "May 17, 2017"
+bibliography: assignment3.bib
+output:
+  html_document:
+    toc: false
+    number_sections: true
+  pdf_document:
+    toc: false
+    number_sections: true
+---
+
+```{r include=FALSE}
+knitr::opts_chunk$set(cache = TRUE, autodep = TRUE)
+```
+
+
+# Setup {-}
+
+```{r}
+library("tidyverse")
+library("haven")
+library("AER")
+library("Formula")
+```
+
+# Problem 1
+
+@Bailey2016a Ex 9.1
+
+```{r}
+RainIV <- read_csv( "Ch09.Ex1.CivilWarRainInstrumentData/RainIV.csv")
+```
+
+```{r}
+ggplot(RainIV, aes(y = InternalConflict, x = LaggedGDPGrowth)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+```{r}
+mod1_f <- InternalConflict ~ LaggedGDPGrowth
+mod1 <- lm(mod1_f, data = RainIV)
+summary(mod1)
+```
+
+**b.** Add controls for initial GDP (`InitialGDP`), democracy (`) mountains, and ethnic and religious fractionalization to the model.
+
+```{r}
+mod2_f <- update(mod1_f, . ~ . + InitialGDP + Democracy +
+                 Mountains + EthnicFrac + ReligiousFrac)
+mod2 <- lm(mod2_f, data = RainIV)
+summary(mod2)
+```
+
+No. The coefficient on $\beta$ would only be a causal estimate under an assumption of no omitted confounders.
+This seems highly unlikely.
+
+**c.** The two conditions needed for a good instrument are 
+
+- inclusion restriction: Rainfall must be correlated with economic growth
+- exclusion restriction: Rainfall must not be correled with war excepct through its effect on economic growth.
+
+The inclusion restriction can be tested (in the first stage):
+
+```{r}
+ggplot(RainIV, aes(x = LaggedRainfallGrowth, y = LaggedGDPGrowth)) +
+  geom_point() +
+  geom_smooth(method = "lm")
+```
+
+The exclusion restriction cannot be tested statistically, and must be argued outside the model.
+
+**d.** Instrumenting GDP growth with rainfall randomly assigns some part of GDP growth to countries.
+
+**e.**
+```{r}
+mod3_f <- InternalConflict ~ LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac | . - LaggedGDPGrowth + LaggedRainfallGrowth
+mod3 <- ivreg(mod3_f, data = RainIV)
+summary(mod3)
+```
+The coefficient on `LaggedGDPGrowth` is 20 times larger than 
+in the OLS regression. It is still not stastistically significant.
+
+f. Redo the 2SLS with country fixed effects.
+```{r}
+mod4_f <- InternalConflict ~ LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code | . - LaggedGDPGrowth + LaggedRainfallGrowth
+mod4 <- ivreg(mod4_f, data = RainIV)
+summary(mod4)
+```
+
+The coefficient on `LaggedGDPGrowth` has increased by 40% (-2 to -2.8) and now has a p-value of 0.06.
+These regressions use only variation within each country and thus remove the country-level unobserved variables that may be correlated with economic growth. 
+
+
+f. Regression `LaggedGDPGrowth` on rainfall and controls:
+```{r}
+mod_f1 <- lm(LaggedGDPGrowth ~ LaggedRainfallGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code, data = RainIV)
+```
+Save the residuals. I use `broom::augment` for convenience, but still need to add `InternalConflict` since it wasn't in the original data.
+```{r}
+data_f <- broom::augment(mod_f1) %>% 
+  left_join(select(RainIV, country_code, InternalConflict), by = "country_code")
+```
+```{r}
+mod_f2 <- lm(InternalConflict ~ .resid + LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code, data = data_f)
+coef(mod_f2)["LaggedGDPGrowth"]
+```
+
+The coefficient is the same as that in the 2SLS.
+
+It controls for endogeneity by controlling for the part of `LaggedGDPGrowth` not explained by rainfall growth (i.e. the non-random part of GDP growth).
+
+
+# Problem 2
+
+@Bailey2016a Ex 9.2
+
+# Problem 3
+
+@Bailey2016a Ex 9.4
+
+# Problem 4
+
+@Bailey2016a Ex 9.5
+
+## References {-}
