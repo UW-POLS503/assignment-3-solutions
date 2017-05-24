@@ -19,10 +19,12 @@ knitr::opts_chunk$set(cache = TRUE, autodep = TRUE)
 
 # Setup {-}
 
-```{r}
+```{r setup,message=FALSE}
 library("tidyverse")
+library("broom")
 library("haven")
 library("AER")
+library("sandwich")
 library("Formula")
 ```
 
@@ -117,12 +119,218 @@ It controls for endogeneity by controlling for the part of `LaggedGDPGrowth` not
 
 @Bailey2016a Ex 9.2
 
+```{r}
+NEWS_STUDY_FILE <- "Ch09.Ex2.TelevisionExperimentData/news_study_MAB.csv"
+col_types <- cols(
+  resid = col_character(),
+  Female = col_character(),
+  watchnat = col_character(),
+  ReadNews = col_character(),
+  pnintst = col_character(),
+  Education = col_character(),
+  income = col_character(),
+  Voted = col_character(),
+  prop = col_character(),
+  infopro = col_character(),
+  WatchProgram = col_character(),
+  learnpro = col_character(),
+  TreatmentGroup = col_character(),
+  prop_dv = col_integer(),
+  InformationLevel = col_integer(),
+  prop_vote = col_integer(),
+  white = col_integer(),
+  partyid = col_integer(),
+  PoliticalInterest = col_character()
+)
+news_study <- read_csv(NEWS_STUDY_FILE, col_types = col_types) %>%
+  mutate(WatchProgram = if_else(WatchProgram == "yes", 1, 0),
+         TreatmentGroup = if_else(WatchProgram == "0", 0, 1))
+```
+
+Estimate a regression with Proposition 209 as a dependent variable and whether the person watched the program as the independent variable,
+```{r}
+mod_news_study_a <- lm(InformationLevel ~ WatchProgram, data = news_study)
+coeftest(mod_news_study_a, vcov. = vcovHC(mod_news_study_a))["WatchProgram", ]
+```
+Those who watched the television program on average report 0.3 higher points (p < .001) on the information about Proposition 209. 
+This should not be interpreted causally, since it is almost certainly biased due to endogeneity.
+One plausible example is that those more informed about politics are more likely to watch this TV program.
+
+b. This regression controls for political interest, newspaper reading, and education.
+```{r}
+mod_news_study_b <-
+  update(mod_news_study_a,
+         . ~ . + PoliticalInterest + Education + ReadNews)
+coeftest(mod_news_study_b, vcov. = vcovHC(mod_news_study_b))["WatchProgram", ]
+```
+The result is smaller 0.19 vs. 0.3 with a higher p-value (p < 0.05).
+The identification strategy is selection on observables, which requires that all relevant variables are controlled for.
+This is unlikely.
+
+c. The assignment variable is a good instrument since it is an experiment, so by construction it is not correlated with the dependent variable and thus not associated with `PoliticalInterest` except watching the TV show.
+```{r}
+mod_news_study_c <- lm(WatchProgram ~ TreatmentGroup + PoliticalInterest +
+                         Education + ReadNews, data = news_study)
+
+coeftest(mod_news_study_c,
+         vcov. = vcovHC(mod_news_study_c))["TreatmentGroup", ]
+```
+
+
+d. Estimate a 2SLS using `TreatmentGroup` as an instrument for `WatchProgram`:
+```{r}
+mod_news_study_d <-
+  ivreg(InformationLevel ~ WatchProgram + PoliticalInterest +
+          Education + ReadNews |
+           . - WatchProgram + TreatmentGroup,
+        data = news_study)
+
+coeftest(mod_news_study_d)["WatchProgram", ]
+
+coeftest(mod_news_study_d, vcov. = vcovHC(mod_news_study_d))["WatchProgram", ]
+```
+
+
+e. The 2SLS suggest that we can't reject that there is an effect of watching the program on information levels. Conditional on the IV assumptions (especially the inclusion restriction), this has removed endogeneity.
+
+
 # Problem 3
 
 @Bailey2016a Ex 9.4
 
+```{r}
+EducationCrimeFile <- "Ch09.Ex4.EducationCrimeData/inmates.csv"
+col_types <- cols(
+  age = col_integer(),
+  state = col_integer(),
+  pob = col_integer(),
+  gqtype = col_integer(),
+  prison = col_integer(),
+  educ = col_integer(),
+  drop = col_integer(),
+  AfAm = col_integer(),
+  yearat14 = col_integer(),
+  birthpl = col_integer(),
+  req_sch = col_integer(),
+  work_age = col_integer(),
+  work_sch = col_integer(),
+  ca = col_integer(),
+  enrolage = col_integer(),
+  drop_age = col_integer(),
+  cl = col_integer(),
+  ca8 = col_integer(),
+  ca9 = col_integer(),
+  ca10 = col_integer(),
+  ca11 = col_integer(),
+  cl6 = col_integer(),
+  cl7 = col_integer(),
+  cl8 = col_integer(),
+  cl9 = col_integer(),
+  year = col_integer(),
+  hisp = col_character()
+)
+EducationCrime <- read_csv(EducationCrimeFile, col_types = col_types)
+```
+
+
+a. Run a LPM with prison as the dependent variable
+
+```{r}
+formula_ex3a <- prison ~ educ + age + AfAm + factor(year) + factor(state)
+mod_ex3a <- lm(formula_ex3a, data = EducationCrime)
+#coeftest(mod_ex3a, vcov. = vcovHC)["educ", ]
+tidy(mod_ex3a) %>% filter(term == "educ")
+```
+On average those with one more year of schooling are 0.1% percent less likely to commit a crime, holding age and race constant (p < 0.001).
+
+b. No. This depends on selection on observables. It is likely there is an unobservable that means that those who are more likely to complete schooling are less likely to commit crimes (SES, aggressiveness, conscientiousness).
+
+c. Compulsary education laws should clearly be associated with more years of schooling, satisfying the inclusion restriction.
+```{r}
+mod_ex3c <- lm(educ ~ ca9 + ca10 + ca11 + age + AfAm + factor(state) +
+                    factor(year), data = EducationCrime)
+mod_ex3c_un <- lm(educ ~ age + AfAm + factor(state) + factor(year),
+                     data = EducationCrime)
+anova(mod_ex3c, mod_ex3c_un)
+tidy(mod_ex3c) %>% filter(term %in% c("ca9", "ca10", "ca11"))
+
+```
+It's not as clear that it satisfies the exclusion restriction. 
+It is plausible that states with more crime are more likely to pass compulsary schooling laws.
+
+d. A 2SLS model using these instruments and robust se:
+```{r}
+mod_ex3d <- ivreg(prison ~ educ + age + AfAm + factor(state) + factor(year) |
+                  . - educ + ca9 + ca10 + ca11, data = EducationCrime)
+# coeftest(mod_ex3d, vcov. = vcovHC)
+summary(mod_ex3d)
+```
+
+
+
 # Problem 4
 
 @Bailey2016a Ex 9.5
+
+```{r}
+GrowthDemocracyFile <- "Ch09.Ex5.GrowthDemocracyData/democracy_income.csv"
+col_types = cols(
+  CountryCode = col_integer(),
+  democracy_fh = col_double(),
+  log_gdp = col_double(),
+  year = col_integer(),
+  worldincome = col_double(),
+  YearOrder = col_integer()
+)
+GrowthDemocracy <- read_csv(GrowthDemocracyFile, col_types = col_types) %>%
+  # add lag GDP
+  group_by(CountryCode) %>%
+  arrange(CountryCode, year) %>%
+  mutate(lag_log_gdp = lag(log_gdp),
+         lag_worldincome = lag(worldincome))
+```
+
+a. Run a model with Democracy as the dependent variable and logged GDP per capita as a 
+```{r}
+mod_ex5a <- lm(democracy_fh ~ lag_log_gdp, data = GrowthDemocracy)
+tidy(mod_ex5a) %>% filter(term == "lag_log_gdp")
+```
+
+b. Include fixed effects of year and country in the previous model,
+```{r}
+mod_ex5b <- lm(democracy_fh ~ lag_log_gdp + factor(year) + factor(CountryCode),
+   data = GrowthDemocracy)
+tidy(mod_ex5b) %>% filter(term == "lag_log_gdp")
+```
+This uses only variation within country and within year. 
+This explains much of the variation in democracy---e.g. time trends and variables
+constant within country.
+
+c. World income of trading partners should be associated with GDP. It is both
+plausible, and has a t-stat of > 3 in the 1st stage regression.
+```{r}
+mod_ex5c <- lm(log_gdp ~ worldincome + factor(year) + factor(CountryCode),
+               data = GrowthDemocracy)
+tidy(mod_ex5c) %>% filter(term == "worldincome")
+```
+The exclusion restriction is not entirely plausible, but I can't think of a 
+strong reason to object. Controlling for year is important since it will control
+global trade shocks. What would be problematic is local changes which increase
+both democracy and GDP per capita -- since most trading partners are close neighbors it
+is plausible to think of spillovers. However, shocks to GDP in the short run seem
+more plausible than shocks to democracy.
+
+d. Run 2SLS with `worldincome` as an instrument for logged GDP,
+```{r}
+mod_ex5d <- ivreg(democracy_fh ~ lag_log_gdp +
+                    factor(year) + factor(CountryCode) |
+                  . - lag_log_gdp + lag_worldincome,
+                  data = GrowthDemocracy)
+summary(mod_ex5d)
+```
+The coefficient switches signs from 0.38 in the panel data to -0.21 in `ivreg` 
+and the p-value decreases from 0.18 to 0.06.
+
+It would probably be better to run this with cluster robust standard errors.
 
 ## References {-}

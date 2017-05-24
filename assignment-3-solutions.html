@@ -126,39 +126,15 @@ $(document).ready(function () {
 
 <div id="setup" class="section level1 unnumbered">
 <h1>Setup</h1>
-<pre class="r"><code>library(&quot;tidyverse&quot;)</code></pre>
-<pre><code>## Loading tidyverse: ggplot2
-## Loading tidyverse: tibble
-## Loading tidyverse: tidyr
-## Loading tidyverse: readr
-## Loading tidyverse: purrr
-## Loading tidyverse: dplyr</code></pre>
-<pre><code>## Conflicts with tidy packages ----------------------------------------------</code></pre>
-<pre><code>## filter(): dplyr, stats
-## lag():    dplyr, stats</code></pre>
-<pre class="r"><code>library(&quot;haven&quot;)
-library(&quot;AER&quot;)</code></pre>
-<pre><code>## Loading required package: car</code></pre>
-<pre><code>## 
-## Attaching package: 'car'</code></pre>
-<pre><code>## The following object is masked from 'package:dplyr':
-## 
-##     recode</code></pre>
-<pre><code>## The following object is masked from 'package:purrr':
-## 
-##     some</code></pre>
-<pre><code>## Loading required package: lmtest</code></pre>
-<pre><code>## Loading required package: zoo</code></pre>
-<pre><code>## 
-## Attaching package: 'zoo'</code></pre>
-<pre><code>## The following objects are masked from 'package:base':
-## 
-##     as.Date, as.Date.numeric</code></pre>
-<pre><code>## Loading required package: sandwich</code></pre>
-<pre><code>## Loading required package: survival</code></pre>
-<pre class="r"><code>library(&quot;Formula&quot;)</code></pre>
-<div id="problem-1" class="section level2">
-<h2><span class="header-section-number">0.1</span> Problem 1</h2>
+<pre class="r"><code>library(&quot;tidyverse&quot;)
+library(&quot;broom&quot;)
+library(&quot;haven&quot;)
+library(&quot;AER&quot;)
+library(&quot;sandwich&quot;)
+library(&quot;Formula&quot;)</code></pre>
+</div>
+<div id="problem-1" class="section level1">
+<h1><span class="header-section-number">1</span> Problem 1</h1>
 <p><span class="citation">Bailey (2016)</span> Ex 9.1</p>
 <pre class="r"><code>RainIV &lt;- read_csv( &quot;Ch09.Ex1.CivilWarRainInstrumentData/RainIV.csv&quot;)</code></pre>
 <pre><code>## Parsed with column specification:
@@ -354,18 +330,431 @@ coef(mod_f2)[&quot;LaggedGDPGrowth&quot;]</code></pre>
 <p>The coefficient is the same as that in the 2SLS.</p>
 <p>It controls for endogeneity by controlling for the part of <code>LaggedGDPGrowth</code> not explained by rainfall growth (i.e. the non-random part of GDP growth).</p>
 </div>
-<div id="problem-2" class="section level2">
-<h2><span class="header-section-number">0.2</span> Problem 2</h2>
+<div id="problem-2" class="section level1">
+<h1><span class="header-section-number">2</span> Problem 2</h1>
 <p><span class="citation">Bailey (2016)</span> Ex 9.2</p>
+<pre class="r"><code>NEWS_STUDY_FILE &lt;- &quot;Ch09.Ex2.TelevisionExperimentData/news_study_MAB.csv&quot;
+col_types &lt;- cols(
+  resid = col_character(),
+  Female = col_character(),
+  watchnat = col_character(),
+  ReadNews = col_character(),
+  pnintst = col_character(),
+  Education = col_character(),
+  income = col_character(),
+  Voted = col_character(),
+  prop = col_character(),
+  infopro = col_character(),
+  WatchProgram = col_character(),
+  learnpro = col_character(),
+  TreatmentGroup = col_character(),
+  prop_dv = col_integer(),
+  InformationLevel = col_integer(),
+  prop_vote = col_integer(),
+  white = col_integer(),
+  partyid = col_integer(),
+  PoliticalInterest = col_character()
+)
+news_study &lt;- read_csv(NEWS_STUDY_FILE, col_types = col_types) %&gt;%
+  mutate(WatchProgram = if_else(WatchProgram == &quot;yes&quot;, 1, 0),
+         TreatmentGroup = if_else(WatchProgram == &quot;0&quot;, 0, 1))</code></pre>
+<p>Estimate a regression with Proposition 209 as a dependent variable and whether the person watched the program as the independent variable,</p>
+<pre class="r"><code>mod_news_study_a &lt;- lm(InformationLevel ~ WatchProgram, data = news_study)
+coeftest(mod_news_study_a, vcov. = vcovHC(mod_news_study_a))[&quot;WatchProgram&quot;, ]</code></pre>
+<pre><code>##     Estimate   Std. Error      t value     Pr(&gt;|t|) 
+## 0.2963682432 0.0763601642 3.8811891825 0.0001179926</code></pre>
+<p>Those who watched the television program on average report 0.3 higher points (p &lt; .001) on the information about Proposition 209. This should not be interpreted causally, since it is almost certainly biased due to endogeneity. One plausible example is that those more informed about politics are more likely to watch this TV program.</p>
+<ol start="2" style="list-style-type: lower-alpha">
+<li>This regression controls for political interest, newspaper reading, and education.</li>
+</ol>
+<pre class="r"><code>mod_news_study_b &lt;-
+  update(mod_news_study_a,
+         . ~ . + PoliticalInterest + Education + ReadNews)
+coeftest(mod_news_study_b, vcov. = vcovHC(mod_news_study_b))[&quot;WatchProgram&quot;, ]</code></pre>
+<pre><code>##   Estimate Std. Error    t value   Pr(&gt;|t|) 
+## 0.19261624 0.07613540 2.52991690 0.01173457</code></pre>
+<p>The result is smaller 0.19 vs. 0.3 with a higher p-value (p &lt; 0.05). The identification strategy is selection on observables, which requires that all relevant variables are controlled for. This is unlikely.</p>
+<ol start="3" style="list-style-type: lower-alpha">
+<li>The assignment variable is a good instrument since it is an experiment, so by construction it is not correlated with the dependent variable and thus not associated with <code>PoliticalInterest</code> except watching the TV show.</li>
+</ol>
+<pre class="r"><code>mod_news_study_c &lt;- lm(WatchProgram ~ TreatmentGroup + PoliticalInterest +
+                         Education + ReadNews, data = news_study)
+
+coeftest(mod_news_study_c,
+         vcov. = vcovHC(mod_news_study_c))[&quot;TreatmentGroup&quot;, ]</code></pre>
+<pre><code>##     Estimate   Std. Error      t value     Pr(&gt;|t|) 
+## 1.000000e+00 4.088662e-16 2.445788e+15 0.000000e+00</code></pre>
+<ol start="4" style="list-style-type: lower-alpha">
+<li>Estimate a 2SLS using <code>TreatmentGroup</code> as an instrument for <code>WatchProgram</code>:</li>
+</ol>
+<pre class="r"><code>mod_news_study_d &lt;-
+  ivreg(InformationLevel ~ WatchProgram + PoliticalInterest +
+          Education + ReadNews |
+           . - WatchProgram + TreatmentGroup,
+        data = news_study)
+
+coeftest(mod_news_study_d)[&quot;WatchProgram&quot;, ]</code></pre>
+<pre><code>##   Estimate Std. Error    t value   Pr(&gt;|t|) 
+## 0.19261624 0.07700970 2.50119458 0.01271667</code></pre>
+<pre class="r"><code>coeftest(mod_news_study_d, vcov. = vcovHC(mod_news_study_d))[&quot;WatchProgram&quot;, ]</code></pre>
+<pre><code>##   Estimate Std. Error    t value   Pr(&gt;|t|) 
+## 0.19261624 0.07613540 2.52991690 0.01173457</code></pre>
+<ol start="5" style="list-style-type: lower-alpha">
+<li>The 2SLS suggest that we can’t reject that there is an effect of watching the program on information levels. Conditional on the IV assumptions (especially the inclusion restriction), this has removed endogeneity.</li>
+</ol>
 </div>
-<div id="problem-3" class="section level2">
-<h2><span class="header-section-number">0.3</span> Problem 3</h2>
+<div id="problem-3" class="section level1">
+<h1><span class="header-section-number">3</span> Problem 3</h1>
 <p><span class="citation">Bailey (2016)</span> Ex 9.4</p>
+<pre class="r"><code>EducationCrimeFile &lt;- &quot;Ch09.Ex4.EducationCrimeData/inmates.csv&quot;
+col_types &lt;- cols(
+  age = col_integer(),
+  state = col_integer(),
+  pob = col_integer(),
+  gqtype = col_integer(),
+  prison = col_integer(),
+  educ = col_integer(),
+  drop = col_integer(),
+  AfAm = col_integer(),
+  yearat14 = col_integer(),
+  birthpl = col_integer(),
+  req_sch = col_integer(),
+  work_age = col_integer(),
+  work_sch = col_integer(),
+  ca = col_integer(),
+  enrolage = col_integer(),
+  drop_age = col_integer(),
+  cl = col_integer(),
+  ca8 = col_integer(),
+  ca9 = col_integer(),
+  ca10 = col_integer(),
+  ca11 = col_integer(),
+  cl6 = col_integer(),
+  cl7 = col_integer(),
+  cl8 = col_integer(),
+  cl9 = col_integer(),
+  year = col_integer(),
+  hisp = col_character()
+)
+EducationCrime &lt;- read_csv(EducationCrimeFile, col_types = col_types)</code></pre>
+<ol style="list-style-type: lower-alpha">
+<li>Run a LPM with prison as the dependent variable</li>
+</ol>
+<pre class="r"><code>formula_ex3a &lt;- prison ~ educ + age + AfAm + factor(year) + factor(state)
+mod_ex3a &lt;- lm(formula_ex3a, data = EducationCrime)
+#coeftest(mod_ex3a, vcov. = vcovHC)[&quot;educ&quot;, ]
+tidy(mod_ex3a) %&gt;% filter(term == &quot;educ&quot;)</code></pre>
+<pre><code>##   term     estimate    std.error statistic p.value
+## 1 educ -0.001198227 1.391285e-05 -86.12376       0</code></pre>
+<p>On average those with one more year of schooling are 0.1% percent less likely to commit a crime, holding age and race constant (p &lt; 0.001).</p>
+<ol start="2" style="list-style-type: lower-alpha">
+<li><p>No. This depends on selection on observables. It is likely there is an unobservable that means that those who are more likely to complete schooling are less likely to commit crimes (SES, aggressiveness, conscientiousness).</p></li>
+<li><p>Compulsary education laws should clearly be associated with more years of schooling, satisfying the inclusion restriction.</p></li>
+</ol>
+<pre class="r"><code>mod_ex3c &lt;- lm(educ ~ ca9 + ca10 + ca11 + age + AfAm + factor(state) +
+                    factor(year), data = EducationCrime)
+mod_ex3c_un &lt;- lm(educ ~ age + AfAm + factor(state) + factor(year),
+                     data = EducationCrime)
+anova(mod_ex3c, mod_ex3c_un)</code></pre>
+<pre><code>## Analysis of Variance Table
+## 
+## Model 1: educ ~ ca9 + ca10 + ca11 + age + AfAm + factor(state) + factor(year)
+## Model 2: educ ~ age + AfAm + factor(state) + factor(year)
+##    Res.Df      RSS Df Sum of Sq      F    Pr(&gt;F)    
+## 1 3610609 33600250                                  
+## 2 3610612 33743214 -3   -142964 5120.9 &lt; 2.2e-16 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+<pre class="r"><code>tidy(mod_ex3c) %&gt;% filter(term %in% c(&quot;ca9&quot;, &quot;ca10&quot;, &quot;ca11&quot;))</code></pre>
+<pre><code>##   term  estimate   std.error statistic       p.value
+## 1  ca9 0.4981164 0.005026353  99.10097  0.000000e+00
+## 2 ca10 0.2735032 0.007207631  37.94634 5.119031e-315
+## 3 ca11 0.6498893 0.005627761 115.47918  0.000000e+00</code></pre>
+<p>It’s not as clear that it satisfies the exclusion restriction. It is plausible that states with more crime are more likely to pass compulsary schooling laws.</p>
+<ol start="4" style="list-style-type: lower-alpha">
+<li>A 2SLS model using these instruments and robust se:</li>
+</ol>
+<pre class="r"><code>mod_ex3d &lt;- ivreg(prison ~ educ + age + AfAm + factor(state) + factor(year) |
+                  . - educ + ca9 + ca10 + ca11, data = EducationCrime)
+# coeftest(mod_ex3d, vcov. = vcovHC)
+summary(mod_ex3d)</code></pre>
+<pre><code>## 
+## Call:
+## ivreg(formula = prison ~ educ + age + AfAm + factor(state) + 
+##     factor(year) | . - educ + ca9 + ca10 + ca11, data = EducationCrime)
+## 
+## Residuals:
+##        Min         1Q     Median         3Q        Max 
+## -0.0510583 -0.0097271 -0.0050842 -0.0005812  1.0144415 
+## 
+## Coefficients:
+##                   Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)      2.983e-02  2.577e-03  11.575  &lt; 2e-16 ***
+## educ            -1.259e-03  2.137e-04  -5.888 3.91e-09 ***
+## age             -3.778e-04  1.127e-05 -33.525  &lt; 2e-16 ***
+## AfAm             2.108e-02  3.888e-04  54.202  &lt; 2e-16 ***
+## factor(state)2  -1.664e-05  1.105e-03  -0.015 0.987982    
+## factor(state)4   5.219e-03  5.496e-04   9.495  &lt; 2e-16 ***
+## factor(state)5   2.438e-04  5.376e-04   0.453 0.650213    
+## factor(state)6   5.550e-03  4.584e-04  12.109  &lt; 2e-16 ***
+## factor(state)8   3.109e-03  5.639e-04   5.513 3.52e-08 ***
+## factor(state)9   2.260e-03  5.489e-04   4.118 3.83e-05 ***
+## factor(state)10  2.824e-03  8.924e-04   3.165 0.001553 ** 
+## factor(state)11 -8.074e-03  9.047e-04  -8.925  &lt; 2e-16 ***
+## factor(state)12  6.031e-03  4.183e-04  14.418  &lt; 2e-16 ***
+## factor(state)13  3.756e-03  4.178e-04   8.991  &lt; 2e-16 ***
+## factor(state)15 -2.250e-03  1.117e-03  -2.013 0.044079 *  
+## factor(state)16  3.306e-03  7.678e-04   4.306 1.66e-05 ***
+## factor(state)17  1.191e-03  4.200e-04   2.836 0.004566 ** 
+## factor(state)18  2.747e-03  4.265e-04   6.440 1.19e-10 ***
+## factor(state)19  1.991e-03  5.082e-04   3.918 8.93e-05 ***
+## factor(state)20  6.286e-03  5.571e-04  11.281  &lt; 2e-16 ***
+## factor(state)21  2.221e-03  4.763e-04   4.662 3.13e-06 ***
+## factor(state)22  2.322e-03  4.461e-04   5.205 1.94e-07 ***
+## factor(state)23  1.551e-03  6.859e-04   2.261 0.023775 *  
+## factor(state)24  2.420e-03  4.834e-04   5.007 5.53e-07 ***
+## factor(state)25  1.892e-03  4.872e-04   3.883 0.000103 ***
+## factor(state)26  2.543e-03  4.091e-04   6.215 5.15e-10 ***
+## factor(state)27  2.223e-03  4.859e-04   4.575 4.77e-06 ***
+## factor(state)28 -3.270e-03  5.190e-04  -6.301 2.96e-10 ***
+## factor(state)29  2.405e-03  4.423e-04   5.438 5.40e-08 ***
+## factor(state)30  2.852e-03  7.931e-04   3.595 0.000324 ***
+## factor(state)31  2.441e-03  6.254e-04   3.904 9.47e-05 ***
+## factor(state)32  5.021e-03  8.201e-04   6.122 9.22e-10 ***
+## factor(state)33  6.735e-04  7.629e-04   0.883 0.377369    
+## factor(state)34  1.394e-03  4.671e-04   2.984 0.002842 ** 
+## factor(state)35  2.642e-03  6.668e-04   3.962 7.45e-05 ***
+## factor(state)36  2.787e-03  4.378e-04   6.366 1.94e-10 ***
+## factor(state)37  2.434e-03  4.097e-04   5.941 2.83e-09 ***
+## factor(state)38  2.786e-04  8.354e-04   0.333 0.738785    
+## factor(state)39  2.492e-03  3.934e-04   6.335 2.38e-10 ***
+## factor(state)40  4.521e-03  5.052e-04   8.949  &lt; 2e-16 ***
+## factor(state)41  4.340e-03  5.563e-04   7.802 6.10e-15 ***
+## factor(state)42  1.532e-03  3.902e-04   3.928 8.57e-05 ***
+## factor(state)44  3.702e-04  7.388e-04   0.501 0.616291    
+## factor(state)45  1.857e-04  4.793e-04   0.387 0.698388    
+## factor(state)46  2.544e-03  8.282e-04   3.071 0.002131 ** 
+## factor(state)47  1.653e-03  4.355e-04   3.795 0.000148 ***
+## factor(state)48  4.781e-03  3.810e-04  12.550  &lt; 2e-16 ***
+## factor(state)49  2.808e-03  7.071e-04   3.972 7.13e-05 ***
+## factor(state)50  1.554e-03  9.643e-04   1.611 0.107121    
+## factor(state)51  3.353e-03  4.231e-04   7.925 2.27e-15 ***
+## factor(state)53  4.348e-03  5.124e-04   8.486  &lt; 2e-16 ***
+## factor(state)54  5.394e-04  5.573e-04   0.968 0.333103    
+## factor(state)55  1.980e-03  4.553e-04   4.349 1.36e-05 ***
+## factor(state)56  1.968e-03  9.796e-04   2.009 0.044528 *  
+## factor(year)70  -2.666e-04  2.693e-04  -0.990 0.322059    
+## factor(year)80   1.679e-03  4.419e-04   3.800 0.000145 ***
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 0.08082 on 3610611 degrees of freedom
+## Multiple R-Squared: 0.0128,  Adjusted R-squared: 0.01278 
+## Wald test: 717.1 on 55 and 3610611 DF,  p-value: &lt; 2.2e-16</code></pre>
 </div>
-<div id="problem-4" class="section level2">
-<h2><span class="header-section-number">0.4</span> Problem 4</h2>
+<div id="problem-4" class="section level1">
+<h1><span class="header-section-number">4</span> Problem 4</h1>
 <p><span class="citation">Bailey (2016)</span> Ex 9.5</p>
-</div>
+<pre class="r"><code>GrowthDemocracyFile &lt;- &quot;Ch09.Ex5.GrowthDemocracyData/democracy_income.csv&quot;
+col_types = cols(
+  CountryCode = col_integer(),
+  democracy_fh = col_double(),
+  log_gdp = col_double(),
+  year = col_integer(),
+  worldincome = col_double(),
+  YearOrder = col_integer()
+)
+GrowthDemocracy &lt;- read_csv(GrowthDemocracyFile, col_types = col_types) %&gt;%
+  # add lag GDP
+  group_by(CountryCode) %&gt;%
+  arrange(CountryCode, year) %&gt;%
+  mutate(lag_log_gdp = lag(log_gdp),
+         lag_worldincome = lag(worldincome))</code></pre>
+<ol style="list-style-type: lower-alpha">
+<li>Run a model with Democracy as the dependent variable and logged GDP per capita as a</li>
+</ol>
+<pre class="r"><code>mod_ex5a &lt;- lm(democracy_fh ~ lag_log_gdp, data = GrowthDemocracy)
+tidy(mod_ex5a) %&gt;% filter(term == &quot;lag_log_gdp&quot;)</code></pre>
+<pre><code>##          term  estimate   std.error statistic      p.value
+## 1 lag_log_gdp 0.2337698 0.008984252  26.01995 7.47271e-112</code></pre>
+<ol start="2" style="list-style-type: lower-alpha">
+<li>Include fixed effects of year and country in the previous model,</li>
+</ol>
+<pre class="r"><code>mod_ex5b &lt;- lm(democracy_fh ~ lag_log_gdp + factor(year) + factor(CountryCode),
+   data = GrowthDemocracy)
+tidy(mod_ex5b) %&gt;% filter(term == &quot;lag_log_gdp&quot;)</code></pre>
+<pre><code>##          term   estimate  std.error statistic   p.value
+## 1 lag_log_gdp 0.03840844 0.02899967  1.324444 0.1857472</code></pre>
+<p>This uses only variation within country and within year. This explains much of the variation in democracy—e.g. time trends and variables constant within country.</p>
+<ol start="3" style="list-style-type: lower-alpha">
+<li>World income of trading partners should be associated with GDP. It is both plausible, and has a t-stat of &gt; 3 in the 1st stage regression.</li>
+</ol>
+<pre class="r"><code>mod_ex5c &lt;- lm(log_gdp ~ worldincome + factor(year) + factor(CountryCode),
+               data = GrowthDemocracy)
+tidy(mod_ex5c) %&gt;% filter(term == &quot;worldincome&quot;)</code></pre>
+<pre><code>##          term  estimate  std.error statistic      p.value
+## 1 worldincome 0.4074482 0.05081291  8.018596 3.395804e-15</code></pre>
+<p>The exclusion restriction is not entirely plausible, but I can’t think of a strong reason to object. Controlling for year is important since it will control global trade shocks. What would be problematic is local changes which increase both democracy and GDP per capita – since most trading partners are close neighbors it is plausible to think of spillovers. However, shocks to GDP in the short run seem more plausible than shocks to democracy.</p>
+<ol start="4" style="list-style-type: lower-alpha">
+<li>Run 2SLS with <code>worldincome</code> as an instrument for logged GDP,</li>
+</ol>
+<pre class="r"><code>mod_ex5d &lt;- ivreg(democracy_fh ~ lag_log_gdp +
+                    factor(year) + factor(CountryCode) |
+                  . - lag_log_gdp + lag_worldincome,
+                  data = GrowthDemocracy)
+summary(mod_ex5d)</code></pre>
+<pre><code>## 
+## Call:
+## ivreg(formula = democracy_fh ~ lag_log_gdp + factor(year) + factor(CountryCode) | 
+##     . - lag_log_gdp + lag_worldincome, data = GrowthDemocracy)
+## 
+## Residuals:
+##       Min        1Q    Median        3Q       Max 
+## -0.740829 -0.098046 -0.003134  0.103748  0.588676 
+## 
+## Coefficients:
+##                         Estimate Std. Error t value Pr(&gt;|t|)    
+## (Intercept)             1.511634   0.795809   1.899 0.057872 .  
+## lag_log_gdp            -0.212988   0.116458  -1.829 0.067802 .  
+## factor(year)1965        0.052065   0.042990   1.211 0.226231    
+## factor(year)1970       -0.032971   0.054500  -0.605 0.545371    
+## factor(year)1975       -0.019955   0.066164  -0.302 0.763044    
+## factor(year)1980        0.058245   0.077258   0.754 0.451134    
+## factor(year)1985        0.090943   0.085582   1.063 0.288273    
+## factor(year)1990        0.141965   0.088543   1.603 0.109269    
+## factor(year)1995        0.214055   0.095932   2.231 0.025945 *  
+## factor(year)2000        0.244586   0.100265   2.439 0.014936 *  
+## factor(CountryCode)6    1.000968   0.236304   4.236 2.55e-05 ***
+## factor(CountryCode)8    0.843134   0.262336   3.214 0.001364 ** 
+## factor(CountryCode)9    1.455676   0.295719   4.922 1.04e-06 ***
+## factor(CountryCode)10   1.402012   0.272214   5.150 3.30e-07 ***
+## factor(CountryCode)14  -0.155311   0.151585  -1.025 0.305883    
+## factor(CountryCode)16   0.138747   0.125361   1.107 0.268736    
+## factor(CountryCode)17   0.064932   0.144226   0.450 0.652685    
+## factor(CountryCode)18   0.373538   0.139387   2.680 0.007522 ** 
+## factor(CountryCode)24   1.117314   0.193426   5.776 1.11e-08 ***
+## factor(CountryCode)25   0.633451   0.133523   4.744 2.49e-06 ***
+## factor(CountryCode)26   0.832586   0.168191   4.950 9.10e-07 ***
+## factor(CountryCode)27   1.327520   0.239295   5.548 3.98e-08 ***
+## factor(CountryCode)30   0.950612   0.144823   6.564 9.60e-11 ***
+## factor(CountryCode)31   0.213614   0.117809   1.813 0.070185 .  
+## factor(CountryCode)32   1.464057   0.299949   4.881 1.28e-06 ***
+## factor(CountryCode)33   1.512442   0.324554   4.660 3.72e-06 ***
+## factor(CountryCode)34   0.858879   0.181323   4.737 2.58e-06 ***
+## factor(CountryCode)35  -0.027954   0.120092  -0.233 0.816001    
+## factor(CountryCode)36   0.226918   0.123151   1.843 0.065771 .  
+## factor(CountryCode)37   0.183033   0.120100   1.524 0.127915    
+## factor(CountryCode)38   0.114527   0.120128   0.953 0.340696    
+## factor(CountryCode)39   0.861877   0.155637   5.538 4.20e-08 ***
+## factor(CountryCode)40   0.300133   0.131037   2.290 0.022264 *  
+## factor(CountryCode)41   0.512517   0.132153   3.878 0.000114 ***
+## factor(CountryCode)42   1.168539   0.171188   6.826 1.76e-11 ***
+## factor(CountryCode)43   0.146808   0.203992   0.720 0.471942    
+## factor(CountryCode)44   1.131723   0.207296   5.459 6.44e-08 ***
+## factor(CountryCode)47   1.388909   0.309418   4.489 8.25e-06 ***
+## factor(CountryCode)51   1.045899   0.180208   5.804 9.45e-09 ***
+## factor(CountryCode)52   1.466359   0.301112   4.870 1.36e-06 ***
+## factor(CountryCode)53   0.698774   0.127221   5.493 5.38e-08 ***
+## factor(CountryCode)54   0.358677   0.163373   2.195 0.028428 *  
+## factor(CountryCode)55   0.692357   0.140147   4.940 9.57e-07 ***
+## factor(CountryCode)56   0.325371   0.122716   2.651 0.008180 ** 
+## factor(CountryCode)58   0.980129   0.241409   4.060 5.41e-05 ***
+## factor(CountryCode)60  -0.087582   0.272763  -0.321 0.748228    
+## factor(CountryCode)61  -0.091143   0.156731  -0.582 0.561055    
+## factor(CountryCode)63   1.333144   0.274798   4.851 1.48e-06 ***
+## factor(CountryCode)64   0.707605   0.165011   4.288 2.03e-05 ***
+## factor(CountryCode)65   1.399007   0.277899   5.034 5.97e-07 ***
+## factor(CountryCode)66   0.559385   0.207746   2.693 0.007242 ** 
+## factor(CountryCode)67   1.423045   0.280466   5.074 4.89e-07 ***
+## factor(CountryCode)70   0.229677   0.123718   1.856 0.063769 .  
+## factor(CountryCode)71   0.171455   0.129842   1.320 0.187063    
+## factor(CountryCode)72   0.469163   0.125878   3.727 0.000208 ***
+## factor(CountryCode)73   0.032907   0.182134   0.181 0.856670    
+## factor(CountryCode)74   0.025857   0.126650   0.204 0.838282    
+## factor(CountryCode)75   1.141115   0.229850   4.965 8.47e-07 ***
+## factor(CountryCode)76   0.999285   0.164919   6.059 2.14e-09 ***
+## factor(CountryCode)77   0.682909   0.143910   4.745 2.48e-06 ***
+## factor(CountryCode)78   0.585027   0.131038   4.465 9.22e-06 ***
+## factor(CountryCode)79   0.559226   0.119443   4.682 3.36e-06 ***
+## factor(CountryCode)81   0.065748   0.138077   0.476 0.634085    
+## factor(CountryCode)82   0.859921   0.215982   3.981 7.50e-05 ***
+## factor(CountryCode)83   0.257445   0.117357   2.194 0.028554 *  
+## factor(CountryCode)84   0.724406   0.117773   6.151 1.24e-09 ***
+## factor(CountryCode)85   1.324210   0.235375   5.626 2.58e-08 ***
+## factor(CountryCode)86   0.431779   0.158647   2.722 0.006642 ** 
+## factor(CountryCode)88   1.432493   0.284077   5.043 5.73e-07 ***
+## factor(CountryCode)89   1.250901   0.244638   5.113 4.00e-07 ***
+## factor(CountryCode)90   1.395002   0.268742   5.191 2.68e-07 ***
+## factor(CountryCode)91   1.017408   0.152158   6.687 4.38e-11 ***
+## factor(CountryCode)92   0.405446   0.137113   2.957 0.003201 ** 
+## factor(CountryCode)93   1.346546   0.260377   5.172 2.96e-07 ***
+## factor(CountryCode)95   0.093697   0.129199   0.725 0.468541    
+## factor(CountryCode)99   1.206026   0.227188   5.309 1.45e-07 ***
+## factor(CountryCode)101  0.721934   0.159830   4.517 7.26e-06 ***
+## factor(CountryCode)107  1.105865   0.172242   6.420 2.37e-10 ***
+## factor(CountryCode)109  0.738260   0.117143   6.302 4.93e-10 ***
+## factor(CountryCode)110  0.238834   0.131017   1.823 0.068701 .  
+## factor(CountryCode)114  0.458021   0.130115   3.520 0.000457 ***
+## factor(CountryCode)116  0.399247   0.125264   3.187 0.001494 ** 
+## factor(CountryCode)118  0.848495   0.197093   4.305 1.88e-05 ***
+## factor(CountryCode)120  0.104768   0.137218   0.764 0.445390    
+## factor(CountryCode)125  0.148302   0.144998   1.023 0.306732    
+## factor(CountryCode)126  0.111595   0.117148   0.953 0.341094    
+## factor(CountryCode)127  1.125612   0.198551   5.669 2.03e-08 ***
+## factor(CountryCode)128  0.007338   0.170259   0.043 0.965632    
+## factor(CountryCode)129  0.767469   0.162987   4.709 2.95e-06 ***
+## factor(CountryCode)130  0.872113   0.194874   4.475 8.78e-06 ***
+## factor(CountryCode)131  0.110271   0.121237   0.910 0.363342    
+## factor(CountryCode)132  0.190609   0.125162   1.523 0.128191    
+## factor(CountryCode)133  0.596319   0.142000   4.199 2.99e-05 ***
+## factor(CountryCode)134  1.435485   0.285574   5.027 6.21e-07 ***
+## factor(CountryCode)135  1.431166   0.283413   5.050 5.52e-07 ***
+## factor(CountryCode)136  0.321585   0.132232   2.432 0.015243 *  
+## factor(CountryCode)137  1.438848   0.287260   5.009 6.79e-07 ***
+## factor(CountryCode)140  0.250041   0.132598   1.886 0.059709 .  
+## factor(CountryCode)141  0.364770   0.177988   2.049 0.040759 *  
+## factor(CountryCode)142  0.668302   0.161847   4.129 4.04e-05 ***
+## factor(CountryCode)144  0.755602   0.166442   4.540 6.53e-06 ***
+## factor(CountryCode)145  0.725007   0.131216   5.525 4.50e-08 ***
+## factor(CountryCode)147  0.892721   0.146923   6.076 1.93e-09 ***
+## factor(CountryCode)148  0.946058   0.205683   4.600 4.94e-06 ***
+## factor(CountryCode)150  0.982876   0.211303   4.651 3.88e-06 ***
+## factor(CountryCode)151  0.568335   0.152717   3.721 0.000212 ***
+## factor(CountryCode)153  0.290625   0.133371   2.179 0.029628 *  
+## factor(CountryCode)155 -0.088428   0.138508  -0.638 0.523381    
+## factor(CountryCode)160  0.404959   0.120453   3.362 0.000812 ***
+## factor(CountryCode)162  0.724986   0.239171   3.031 0.002517 ** 
+## factor(CountryCode)165  0.191632   0.124626   1.538 0.124543    
+## factor(CountryCode)166  0.838298   0.159998   5.239 2.08e-07 ***
+## factor(CountryCode)168  0.339155   0.139598   2.430 0.015346 *  
+## factor(CountryCode)172  1.434579   0.294420   4.873 1.34e-06 ***
+## factor(CountryCode)174  0.652452   0.222295   2.935 0.003434 ** 
+## factor(CountryCode)175  0.165854   0.128643   1.289 0.197695    
+## factor(CountryCode)176  0.034181   0.123085   0.278 0.781318    
+## factor(CountryCode)177  0.056079   0.122300   0.459 0.646696    
+## factor(CountryCode)178  0.602021   0.124609   4.831 1.64e-06 ***
+## factor(CountryCode)182  1.207397   0.219898   5.491 5.43e-08 ***
+## factor(CountryCode)183  0.358918   0.154938   2.317 0.020790 *  
+## factor(CountryCode)184  0.780971   0.162593   4.803 1.88e-06 ***
+## factor(CountryCode)187 -0.031677   0.176244  -0.180 0.857407    
+## factor(CountryCode)188 -0.051740   0.165546  -0.313 0.754713    
+## factor(CountryCode)191  1.058565   0.210854   5.020 6.41e-07 ***
+## factor(CountryCode)192  1.482195   0.316485   4.683 3.33e-06 ***
+## factor(CountryCode)195  0.987634   0.174491   5.660 2.13e-08 ***
+## factor(CountryCode)196  1.146777   0.228673   5.015 6.58e-07 ***
+## factor(CountryCode)197 -0.206241   0.177090  -1.165 0.244537    
+## factor(CountryCode)208  0.898084   0.209955   4.278 2.13e-05 ***
+## factor(CountryCode)209 -0.111803   0.146543  -0.763 0.445734    
+## factor(CountryCode)210  0.250349   0.126633   1.977 0.048401 *  
+## factor(CountryCode)211  0.354456   0.127761   2.774 0.005665 ** 
+## ---
+## Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+## 
+## Residual standard error: 0.2052 on 773 degrees of freedom
+## Multiple R-Squared: 0.726,   Adjusted R-squared: 0.6792 
+## Wald test: 16.05 on 132 and 773 DF,  p-value: &lt; 2.2e-16</code></pre>
+<p>The coefficient switches signs from 0.38 in the panel data to -0.21 in <code>ivreg</code> and the p-value decreases from 0.18 to 0.06.</p>
+<p>It would probably be better to run this with cluster robust standard errors.</p>
 <div id="references" class="section level2 unnumbered">
 <h2>References</h2>
 <div id="refs" class="references">
