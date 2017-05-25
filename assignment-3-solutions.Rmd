@@ -42,18 +42,18 @@ ggplot(RainIV, aes(y = InternalConflict, x = LaggedGDPGrowth)) +
   geom_smooth(method = "lm")
 ```
 ```{r}
-mod1_f <- InternalConflict ~ LaggedGDPGrowth
-mod1 <- lm(mod1_f, data = RainIV)
-summary(mod1)
+f_1a <- InternalConflict ~ LaggedGDPGrowth
+mod_1a <- lm(f_1a, data = RainIV)
+summary(mod_1a)
 ```
 
 **b.** Add controls for initial GDP (`InitialGDP`), democracy (`) mountains, and ethnic and religious fractionalization to the model.
 
 ```{r}
-mod2_f <- update(mod1_f, . ~ . + InitialGDP + Democracy +
-                 Mountains + EthnicFrac + ReligiousFrac)
-mod2 <- lm(mod2_f, data = RainIV)
-summary(mod2)
+f_1b <- update(f_1a, . ~ . + InitialGDP + Democracy + Mountains + EthnicFrac +
+                 ReligiousFrac)
+mod_1b <- lm(f_1b, data = RainIV)
+summary(mod_1b)
 ```
 
 No. The coefficient on $\beta$ would only be a causal estimate under an assumption of no omitted confounders.
@@ -64,8 +64,7 @@ This seems highly unlikely.
 - inclusion restriction: Rainfall must be correlated with economic growth
 - exclusion restriction: Rainfall must not be correled with war excepct through its effect on economic growth.
 
-The inclusion restriction can be tested (in the first stage):
-
+The inclusion restriction can be tested (in the first stage)
 ```{r}
 ggplot(RainIV, aes(x = LaggedRainfallGrowth, y = LaggedGDPGrowth)) +
   geom_point() +
@@ -78,39 +77,42 @@ The exclusion restriction cannot be tested statistically, and must be argued out
 
 **e.**
 ```{r}
-mod3_f <- InternalConflict ~ LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac | . - LaggedGDPGrowth + LaggedRainfallGrowth
-mod3 <- ivreg(mod3_f, data = RainIV)
-summary(mod3)
+f_1e <- InternalConflict ~ LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac | . - LaggedGDPGrowth + LaggedRainfallGrowth
+mod_1e <- ivreg(f_1e, data = RainIV)
+summary(mod_1e)
 ```
 The coefficient on `LaggedGDPGrowth` is 20 times larger than 
 in the OLS regression. It is still not stastistically significant.
 
 f. Redo the 2SLS with country fixed effects.
 ```{r}
-mod4_f <- InternalConflict ~ LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code | . - LaggedGDPGrowth + LaggedRainfallGrowth
-mod4 <- ivreg(mod4_f, data = RainIV)
-summary(mod4)
+f_1f <- InternalConflict ~ LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code | . - LaggedGDPGrowth + LaggedRainfallGrowth
+mod_1f <- ivreg(f_1f, data = RainIV)
+summary(mod_1f)
 ```
 
 The coefficient on `LaggedGDPGrowth` has increased by 40% (-2 to -2.8) and now has a p-value of 0.06.
 These regressions use only variation within each country and thus remove the country-level unobserved variables that may be correlated with economic growth. 
 
 
-f. Regression `LaggedGDPGrowth` on rainfall and controls:
+g. Regression `LaggedGDPGrowth` on rainfall and controls:
 ```{r}
-mod_f1 <- lm(LaggedGDPGrowth ~ LaggedRainfallGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code, data = RainIV)
+mod_1g <- lm(LaggedGDPGrowth ~ LaggedRainfallGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code, data = RainIV)
 ```
 Save the residuals. I use `broom::augment` for convenience, but still need to add `InternalConflict` since it wasn't in the original data.
 ```{r}
-data_f <- broom::augment(mod_f1) %>% 
-  left_join(select(RainIV, country_code, InternalConflict), by = "country_code")
+RainIV$resid <- residuals(mod_1g)
 ```
 ```{r}
-mod_f2 <- lm(InternalConflict ~ .resid + LaggedGDPGrowth + InitialGDP + Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code, data = data_f)
-coef(mod_f2)["LaggedGDPGrowth"]
+mod_1g <- lm(InternalConflict ~ LaggedGDPGrowth + resid + InitialGDP +
+               Democracy + Mountains + EthnicFrac + ReligiousFrac + country_code,
+             data = RainIV)
+coef(mod_1g)["LaggedGDPGrowth"]
 ```
-
 The coefficient is the same as that in the 2SLS.
+```{r}
+coef(mod_1f)["LaggedGDPGrowth"]
+```
 
 It controls for endogeneity by controlling for the part of `LaggedGDPGrowth` not explained by rainfall growth (i.e. the non-random part of GDP growth).
 
@@ -197,6 +199,18 @@ e. The 2SLS suggest that we can't reject that there is an effect of watching the
 # Problem 3
 
 @Bailey2016a Ex 9.4
+```{r}
+zipfile <- "Ch09.Ex2.TelevisionExperimentData.zip"
+URL <- paste0("http://global.oup.com/",
+              "us/companion.websites/fdscontent/uscompanion/us/",
+            "static/companion.websites/9780199981946/data_sets/ch9/",
+"Ch09.Ex4.EducationCrimeData.zip")
+if (!file.exists(zipfile)) {
+  download.file(URL, destfile = zipfile)
+  unzip(zipfile) 
+}
+```
+
 
 ```{r}
 EducationCrimeFile <- "Ch09.Ex4.EducationCrimeData/inmates.csv"
